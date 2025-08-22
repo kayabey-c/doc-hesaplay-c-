@@ -1,6 +1,7 @@
-streamlit>=1.36
-pandas>=2.0
-numpy>=1.25
-openpyxl>=3.1
-XlsxWriter>=3.1
+streamlit==1.31.1
+pandas==2.2.2
+numpy==1.26.4
+openpyxl==3.1.5
+XlsxWriter==3.2.0
+
 
