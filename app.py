@@ -1,4 +1,4 @@
-%%writefile app.py
+
 import re, io, unicodedata, calendar
 import pandas as pd
 import numpy as np
@@ -181,14 +181,6 @@ st.download_button(
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
 
-!pip install -q XlsxWriter
-# Streamlit kur + app.py'yi başlat
-!pip -q install streamlit
-!streamlit run app.py --server.port 8501 --server.headless true &>/content/streamlit.log &
 
-# Cloudflared (binary) indir ve tünel aç
-!wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O /content/cloudflared
-!chmod +x /content/cloudflared
-!/content/cloudflared tunnel --url http://localhost:8501 --no-autoupdate
 
 
