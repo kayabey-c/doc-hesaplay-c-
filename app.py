@@ -1,5 +1,4 @@
-
-import re, io, unicodedata, calendar
+import re, io, unicodedata
 import pandas as pd
 import numpy as np
 import streamlit as st
@@ -39,18 +38,31 @@ def classify_kf(val):
     v = norm_text(val)
     for key, pats in KF_PATTERNS.items():
         for p in pats:
-            if p in v: return key
+            if p in v:
+                return key
     return None
 
-def detect_month_columns_by_parsing(df: pd.DataFrame):
+# Hem datetime başlıkları hem de "YYYY-MM-DD ..." metin başlıkları yakalar
+def detect_month_columns(df: pd.DataFrame):
     month_cols = []
+
+    # 1) Zaten datetime olan başlıklar
     for c in df.columns:
-        s = str(c).strip()
-        m = re.match(r"^(\d{4}[-/]\d{2}[-/]\d{2})", s)
-        if m:
-            ts = pd.to_datetime(m.group(1), errors="coerce")
-            if pd.notna(ts):
-                month_cols.append((c, pd.Timestamp(ts.year, ts.month, 1)))
+        if isinstance(c, pd.Timestamp):
+            month_cols.append((c, pd.Timestamp(c.year, c.month, 1)))
+
+    # 2) Metin başlığın başında YYYY-MM-DD varsa
+    for c in df.columns:
+        if isinstance(c, str):
+            s = c.strip()
+            m = re.match(r"^(\d{4}[-/]\d{2}[-/]\d{2})", s)
+            if m:
+                ts = pd.to_datetime(m.group(1), errors="coerce")
+                if pd.notna(ts):
+                    month_cols.append((c, pd.Timestamp(ts.year, ts.month, 1)))
+
+    # Tekilleştir + sırala
+    month_cols = list({c: ts for c, ts in month_cols}.items())
     month_cols.sort(key=lambda x: x[1])
     return month_cols
 
@@ -62,7 +74,7 @@ if uploaded is None:
     st.stop()
 
 # ------------ 1: Oku + ilk görünüm ------------
-df = pd.read_excel(uploaded)
+df = pd.read_excel(uploaded)  # openpyxl gerekli
 st.success("Dosya okundu ✅")
 st.dataframe(df.head(), use_container_width=True)
 
@@ -70,13 +82,7 @@ plant_col = "Plant"
 kf_col    = "Key Figure"
 
 # ------------ 2: KF sınıflandırma & hızlı kontrol ------------
-months_columns = [c for c in df.columns if isinstance(c, (pd.Timestamp, DT))]
-months_columns.sort()
-st.write("**Months columns (ilk 6):**", months_columns[:6])
-st.write("**Toplam ay kolon sayısı:**", len(months_columns))
-
 df["_kf_class"] = df[kf_col].map(classify_kf)
-df.loc[df["_kf_class"] == "consensus", plant_col] = "EIP"
 
 st.subheader("Key Figure eşleştirme sonucu")
 st.dataframe(df[["_kf_class", kf_col]].drop_duplicates(), use_container_width=True)
@@ -89,9 +95,9 @@ st.dataframe(
 )
 
 # ------------ 3: Long form + DOC hesap ------------
-month_cols = detect_month_columns_by_parsing(df)
+month_cols = detect_month_columns(df)
 if not month_cols:
-    st.error("Ay kolonları bulunamadı (başlık 'YYYY-MM-DD ...' formatında olmalı).")
+    st.error("Ay kolonları bulunamadı. Başlıklar datetime ya da 'YYYY-MM-DD ...' formatında olmalı.")
     st.stop()
 
 st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
@@ -108,8 +114,6 @@ df_long = df.melt(
 )
 df_long["month_ts"] = df_long["month_col"].map(col_to_ts)
 
-if "_kf_class" not in df.columns:
-    df["_kf_class"] = df[kf_col].map(classify_kf)
 df_long["_kf_class"] = df_long[kf_col].map(classify_kf)
 
 is_eip         = df_long[plant_col].astype(str).str.lower().str.contains("eip", na=False)
@@ -117,8 +121,8 @@ mask_consensus = (df_long["_kf_class"] == "consensus") & is_eip
 mask_projected = (df_long["_kf_class"] == "projected_stock")
 
 df_long["value"] = pd.to_numeric(df_long["value"], errors="coerce")
-df_long.loc[df_long["_kf_class"]=="consensus","value"] = (
-    df_long.loc[df_long["_kf_class"]=="consensus","value"].clip(lower=0)
+df_long.loc[df_long["_kf_class"]=="consensus", "value"] = (
+    df_long.loc[df_long["_kf_class"]=="consensus", "value"].clip(lower=0)
 )
 
 cons_month = (df_long.loc[mask_consensus]
@@ -130,9 +134,9 @@ proj_month = (df_long.loc[mask_projected]
 
 doc_df = pd.concat([proj_month, cons_month], axis=1).sort_index()
 
-MAX_DOC_IF_NO_RUNOUT     = 600
-DAYS_PER_MONTH           = 30
-CONSENSUS_UNIT_MULTIPLIER= 1
+MAX_DOC_IF_NO_RUNOUT      = 600
+DAYS_PER_MONTH            = 30
+CONSENSUS_UNIT_MULTIPLIER = 1
 
 months = doc_df.index.to_list()
 stock  = doc_df["monthly_projected_eip_gp"].reindex(months).fillna(0).astype(float)
@@ -140,23 +144,27 @@ dem    = (doc_df["monthly_consensus_eip"].reindex(months).fillna(0).astype(float
           * CONSENSUS_UNIT_MULTIPLIER).clip(lower=0)
 
 def doc_days_from_stock(stock_val, future_monthly_demand):
-    if pd.isna(stock_val) or stock_val <= 0: return 0.0
-    cum = 0.0; full_months = 0
+    if pd.isna(stock_val) or stock_val <= 0:
+        return 0.0
+    cum = 0.0
+    full_months = 0
     for dm in pd.Series(future_monthly_demand).fillna(0).astype(float):
         dm = max(0.0, dm)
         if dm == 0:
-            full_months += 1; continue
+            full_months += 1
+            continue
         if cum + dm < stock_val:
-            cum += dm; full_months += 1
+            cum += dm
+            full_months += 1
         else:
             remaining = stock_val - cum
-            frac = max(0.0, remaining)/dm
-            return full_months*DAYS_PER_MONTH + frac*DAYS_PER_MONTH
+            frac = max(0.0, remaining) / dm
+            return full_months * DAYS_PER_MONTH + frac * DAYS_PER_MONTH
     return MAX_DOC_IF_NO_RUNOUT
 
 doc_vals = []
 for i, _ in enumerate(months):
-    future_dem = dem.iloc[i+1:]
+    future_dem = dem.iloc[i+1:]   # mevcut ayı hariç, ileri aylar
     doc_vals.append(doc_days_from_stock(stock.iloc[i], future_dem))
 
 doc_df["DOC_days"] = doc_vals
@@ -174,12 +182,10 @@ st.dataframe(out_df, use_container_width=True)
 buf = io.BytesIO()
 with pd.ExcelWriter(buf, engine="xlsxwriter") as w:
     out_df.to_excel(w, sheet_name="DOC", index=False)
+buf.seek(0)  # önemli
 st.download_button(
     "Excel'i indir (DOC_summary.xlsx)",
-    data=buf.getvalue(),
+    data=buf,
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
-
-
-
