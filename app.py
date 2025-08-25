@@ -9,18 +9,18 @@ st.title("📦 Days of Coverage (DOC) Hesaplayıcı (Colab 1:1)")
 
 # Logo ve açıklama
 # Logo ve açıklama
+st.image(
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Eczacibasi_logo.svg/512px-Eczacibasi_logo.svg.png",
+    width=200,
+)
+
 st.markdown(
     """
-    <div style="text-align: center;">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/b/b7/Eczacibasi_logo.svg" 
-             alt="Eczacıbaşı Logo" width="200">
-        <h3>Days of Coverage (DOC) Hesaplayıcı</h3>
-        <p>📊 Excel dosyanızı yükleyin → Projeksiyon stok ve konsensus talebe göre 
-        otomatik DOC hesaplamalarını görün.</p>
-    </div>
-    """,
-    unsafe_allow_html=True
+    **📊 Excel dosyanızı yükleyin →** *projected stock* ve *consensus demand* değerlerine göre  
+    otomatik **Days of Coverage (DOC)** hesaplamalarını görün.  
+    """
 )
+
 
 
 # ------------ Yardımcılar (Colab ile birebir) ------------
@@ -212,5 +212,6 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
