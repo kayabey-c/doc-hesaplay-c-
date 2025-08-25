@@ -5,9 +5,9 @@ import streamlit as st
 from datetime import datetime as DT
 
 st.set_page_config(page_title="DOC Hesap", layout="wide")
-st.title("📦 Days of Coverage (DOC) Hesaplayıcı")
+st.title("📦 Days of Coverage (DOC) Hesaplayıcı (Colab 1:1)")
 
-# ------------ Yardımcılar ------------
+# ------------ Yardımcılar (Colab ile birebir) ------------
 def norm_text(s: str) -> str:
     s = str(s).strip()
     s = unicodedata.normalize("NFKD", s)
@@ -36,56 +36,46 @@ KF_PATTERNS = {
 
 def classify_kf(val):
     v = norm_text(val)
-    for key, pats in KF_PATTERNS.items():
-        for p in pats:
+    for key, patterns in KF_PATTERNS.items():
+        for p in patterns:
             if p in v:
                 return key
     return None
 
-# Hem datetime başlıkları hem de "YYYY-MM-DD ..." metin başlıkları yakalar
-def detect_month_columns(df: pd.DataFrame):
+# --- 3.1: Ay Kolonlarını Algıla (Colab regex'i ile) ---
+def detect_month_columns_by_parsing(df: pd.DataFrame):
     month_cols = []
-
     for c in df.columns:
-        # 1) Her tür başlığı önce doğrudan parse etmeyi dene
-        ts = pd.to_datetime(c, errors="coerce")
-        if pd.notna(ts):
-            month_cols.append((c, pd.Timestamp(ts.year, ts.month, 1)))
-            continue
-
-        # 2) Olmadıysa (çok garip stringler için) regex fallback
-        if isinstance(c, str):
-            s = c.strip()
-            m = re.match(r"^(\d{4}[-/]\d{2}[-/]\d{2})", s)
-            if m:
-                ts2 = pd.to_datetime(m.group(1), errors="coerce")
-                if pd.notna(ts2):
-                    month_cols.append((c, pd.Timestamp(ts2.year, ts2.month, 1)))
-
-    # Tekilleştir + sırala
-    month_cols = list({c: ts for c, ts in month_cols}.items())
+        s = str(c).strip()
+        m = re.match(r"^(\d{4}[-/]\d{2}[-/]\d{2})", s)
+        if m:
+            ts = pd.to_datetime(m.group(1), errors="coerce")
+            if pd.notna(ts):
+                month_cols.append((c, pd.Timestamp(ts.year, ts.month, 1)))
     month_cols.sort(key=lambda x: x[1])
     return month_cols
 
-
 # ------------ Dosya yükleme ------------
 uploaded = st.file_uploader("Excel'i sürükleyip bırakın", type=["xlsx","xls"])
-
 if uploaded is None:
     st.info("Başlamak için bir Excel yükleyin.")
     st.stop()
 
-# ------------ 1: Oku + ilk görünüm ------------
-df = pd.read_excel(uploaded)  # openpyxl gerekli
+# ------------ 1: Oku + ilk görünüm (Colab ile aynı veri hazırlığı) ------------
+df = pd.read_excel(uploaded)  # openpyxl gerekir
 st.success("Dosya okundu ✅")
 st.dataframe(df.head(), use_container_width=True)
 
 plant_col = "Plant"
 kf_col    = "Key Figure"
 
-# ------------ 2: KF sınıflandırma & hızlı kontrol ------------
+# Key figure sınıflandır
 df["_kf_class"] = df[kf_col].map(classify_kf)
 
+# 🔧 Colab'daki gibi: consensus satırlarını EIP olarak işaretle
+df.loc[df["_kf_class"] == "consensus", "Plant"] = "EIP"
+
+# Göz kontrolü için
 st.subheader("Key Figure eşleştirme sonucu")
 st.dataframe(df[["_kf_class", kf_col]].drop_duplicates(), use_container_width=True)
 
@@ -96,15 +86,14 @@ st.dataframe(
     use_container_width=True
 )
 
-# ------------ 3: Long form + DOC hesap ------------
-month_cols = detect_month_columns(df)
+# ------------ 3: Long form + DOC hesap (Colab mantığı) ------------
+month_cols = detect_month_columns_by_parsing(df)
 if not month_cols:
-    st.error("Ay kolonları bulunamadı. Başlıklar datetime ya da 'YYYY-MM-DD ...' formatında olmalı.")
+    st.error("Ay kolonları bulunamadı. Başlıklar 'YYYY-MM-DD ...' ile başlamalı (Colab regex).")
     st.stop()
 
 st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
 st.write("**İlk 6 ay:**", month_cols[:6])
-st.write("Kolon tipleri:", [(str(c), type(c).__name__) for c in df.columns])
 
 month_names = [c for c, _ in month_cols]
 col_to_ts   = dict(month_cols)
@@ -117,29 +106,42 @@ df_long = df.melt(
 )
 df_long["month_ts"] = df_long["month_col"].map(col_to_ts)
 
+# Key figure tekrar (long için)
 df_long["_kf_class"] = df_long[kf_col].map(classify_kf)
 
+# Filtreler (Colab ile aynı)
 is_eip         = df_long[plant_col].astype(str).str.lower().str.contains("eip", na=False)
 mask_consensus = (df_long["_kf_class"] == "consensus") & is_eip
-mask_projected = (df_long["_kf_class"] == "projected_stock")
+mask_projected = df_long["_kf_class"] == "projected_stock"
 
+# Sayısallaştırma + clip (Colab ile aynı)
 df_long["value"] = pd.to_numeric(df_long["value"], errors="coerce")
-df_long.loc[df_long["_kf_class"]=="consensus", "value"] = (
-    df_long.loc[df_long["_kf_class"]=="consensus", "value"].clip(lower=0)
+df_long.loc[df_long["_kf_class"] == "consensus", "value"] = (
+    df_long.loc[df_long["_kf_class"] == "consensus", "value"].clip(lower=0)
 )
 
-cons_month = (df_long.loc[mask_consensus]
-              .groupby("month_ts", dropna=True)["value"].sum()
-              .rename("monthly_consensus_eip"))
-proj_month = (df_long.loc[mask_projected]
-              .groupby("month_ts", dropna=True)["value"].sum()
-              .rename("monthly_projected_eip_gp"))
+# Aylık toplamlar
+cons_month = (
+    df_long.loc[mask_consensus]
+    .groupby("month_ts", dropna=True)["value"]
+    .sum()
+    .rename("monthly_consensus_eip")
+)
+proj_month = (
+    df_long.loc[mask_projected]
+    .groupby("month_ts", dropna=True)["value"]
+    .sum()
+    .rename("monthly_projected_eip_gp")
+)
 
-doc_df = pd.concat([proj_month, cons_month], axis=1).sort_index()
+doc_df = pd.concat([proj_month, cons_month], axis=1)
 
+# --- DOC Hesabı (Colab ile 1:1) ---
 MAX_DOC_IF_NO_RUNOUT      = 600
 DAYS_PER_MONTH            = 30
-CONSENSUS_UNIT_MULTIPLIER = 1
+CONSENSUS_UNIT_MULTIPLIER = 1  # Gerekirse 10
+
+doc_df = doc_df.sort_index()
 
 months = doc_df.index.to_list()
 stock  = doc_df["monthly_projected_eip_gp"].reindex(months).fillna(0).astype(float)
@@ -176,16 +178,18 @@ if len(months) >= 2 and dem.iloc[1] > 0:
     naive_first = stock.iloc[0] / dem.iloc[1] * DAYS_PER_MONTH
     st.caption(f"[Sanity] 1. satır (sadece bir sonraki ay) ≈ {naive_first:.2f} gün")
 
-st.subheader("📊 DOC Sonuç Tablosu")
-out_df = (doc_df[["monthly_projected_eip_gp","monthly_consensus_eip","DOC_days"]]
-          .reset_index(names=["month"]))
+# Çıktı tablo + indir
+st.subheader("📊 DOC Sonuç Tablosu (Colab ile aynı mantık)")
+out_df = (
+    doc_df[["monthly_projected_eip_gp","monthly_consensus_eip","DOC_days"]]
+    .reset_index(names=["month"])
+)
 st.dataframe(out_df, use_container_width=True)
 
-# İndirilebilir Excel
 buf = io.BytesIO()
 with pd.ExcelWriter(buf, engine="xlsxwriter") as w:
     out_df.to_excel(w, sheet_name="DOC", index=False)
-buf.seek(0)  # önemli
+buf.seek(0)
 st.download_button(
     "Excel'i indir (DOC_summary.xlsx)",
     data=buf,
