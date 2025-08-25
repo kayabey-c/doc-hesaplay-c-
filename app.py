@@ -5,7 +5,7 @@ import streamlit as st
 from datetime import datetime as DT
 
 st.set_page_config(page_title="DOC Hesap", layout="wide")
-st.title("📦 Days of Coverage (DOC) Hesaplayıcı (Colab 1:1)")
+st.title("📦 Days of Coverage (DOC) Hesaplayıcı")
 
 # Logo ve açıklama
 # Logo ve açıklama
@@ -212,6 +212,7 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
 
