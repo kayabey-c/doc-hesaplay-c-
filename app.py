@@ -107,8 +107,7 @@ if not month_cols:
     st.error("Ay kolonları bulunamadı. Başlıklar 'YYYY-MM-DD ...' ile başlamalı (Colab regex).")
     st.stop()
 
-st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
-st.write("**İlk 6 ay:**", month_cols[:6])
+
 
 month_names = [c for c, _ in month_cols]
 col_to_ts   = dict(month_cols)
@@ -211,6 +210,7 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
 
