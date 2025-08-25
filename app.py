@@ -16,8 +16,7 @@ st.image(
 
 st.markdown(
     """
-    **📊 Excel dosyanızı yükleyin →** *projected stock* ve *consensus demand* değerlerine göre  
-    otomatik **Days of Coverage (DOC)** hesaplamalarını görün.  
+    **📊 Excel dosyanızı yükleyin →** *projected stock* ve *consensus demand* değerlerine göre otomatik **Days of Coverage (DOC)** hesaplamalarını görün.  
     """
 )
 
@@ -212,6 +211,7 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
 
 
