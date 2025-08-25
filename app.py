@@ -46,25 +46,27 @@ def classify_kf(val):
 def detect_month_columns(df: pd.DataFrame):
     month_cols = []
 
-    # 1) Zaten datetime olan başlıklar
     for c in df.columns:
-        if isinstance(c, pd.Timestamp):
-            month_cols.append((c, pd.Timestamp(c.year, c.month, 1)))
+        # 1) Her tür başlığı önce doğrudan parse etmeyi dene
+        ts = pd.to_datetime(c, errors="coerce")
+        if pd.notna(ts):
+            month_cols.append((c, pd.Timestamp(ts.year, ts.month, 1)))
+            continue
 
-    # 2) Metin başlığın başında YYYY-MM-DD varsa
-    for c in df.columns:
+        # 2) Olmadıysa (çok garip stringler için) regex fallback
         if isinstance(c, str):
             s = c.strip()
             m = re.match(r"^(\d{4}[-/]\d{2}[-/]\d{2})", s)
             if m:
-                ts = pd.to_datetime(m.group(1), errors="coerce")
-                if pd.notna(ts):
-                    month_cols.append((c, pd.Timestamp(ts.year, ts.month, 1)))
+                ts2 = pd.to_datetime(m.group(1), errors="coerce")
+                if pd.notna(ts2):
+                    month_cols.append((c, pd.Timestamp(ts2.year, ts2.month, 1)))
 
     # Tekilleştir + sırala
     month_cols = list({c: ts for c, ts in month_cols}.items())
     month_cols.sort(key=lambda x: x[1])
     return month_cols
+
 
 # ------------ Dosya yükleme ------------
 uploaded = st.file_uploader("Excel'i sürükleyip bırakın", type=["xlsx","xls"])
@@ -102,6 +104,7 @@ if not month_cols:
 
 st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
 st.write("**İlk 6 ay:**", month_cols[:6])
+st.write("Kolon tipleri:", [(str(c), type(c).__name__) for c in df.columns])
 
 month_names = [c for c, _ in month_cols]
 col_to_ts   = dict(month_cols)
@@ -189,3 +192,4 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
