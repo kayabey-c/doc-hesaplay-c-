@@ -7,6 +7,22 @@ from datetime import datetime as DT
 st.set_page_config(page_title="DOC Hesap", layout="wide")
 st.title("📦 Days of Coverage (DOC) Hesaplayıcı (Colab 1:1)")
 
+# Logo ve açıklama
+# Logo ve açıklama
+st.markdown(
+    """
+    <div style="text-align: center;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/b/b7/Eczacibasi_logo.svg" 
+             alt="Eczacıbaşı Logo" width="200">
+        <h3>Days of Coverage (DOC) Hesaplayıcı</h3>
+        <p>📊 Excel dosyanızı yükleyin → Projeksiyon stok ve konsensus talebe göre 
+        otomatik DOC hesaplamalarını görün.</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
 # ------------ Yardımcılar (Colab ile birebir) ------------
 def norm_text(s: str) -> str:
     s = str(s).strip()
@@ -196,4 +212,5 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
+
 
