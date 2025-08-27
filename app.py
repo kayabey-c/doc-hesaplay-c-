@@ -58,13 +58,9 @@ def classify_kf(val):
     return None
 
 # --- 3.1: Ay Kolonlarını Algıla (Colab regex'i ile) ---
-def detect_month_columns(df: pd.DataFrame):
+def detect_month_columns_by_parsing(df: pd.DataFrame):
     month_cols = []
     for c in df.columns:
-        if isinstance(c, (pd.Timestamp, np.datetime64)):
-            ts = pd.Timestamp(c)
-            month_cols.append((c, pd.Timestamp(ts.year, ts.month, 1)))
-            continue
         s = str(c).strip()
         m = re.match(r"^(\d{4}[-/]\d{2}[-/]\d{2})", s)
         if m:
@@ -74,52 +70,25 @@ def detect_month_columns(df: pd.DataFrame):
     month_cols.sort(key=lambda x: x[1])
     return month_cols
 
-
 # ------------ Dosya yükleme ------------
 uploaded = st.file_uploader("Excel'i sürükleyip bırakın", type=["xlsx","xls"])
 if uploaded is None:
     st.info("Başlamak için bir Excel yükleyin.")
     st.stop()
 
-
 # ------------ 1: Oku + ilk görünüm (Colab ile aynı veri hazırlığı) ------------
 df = pd.read_excel(uploaded)  # openpyxl gerekir
-df.columns = df.columns.map(lambda x: str(x).strip())  # ✅ baştaki/sondaki boşlukları temizle
-
-
-# Başlıkları yazdırıp göz kontrol yap
-st.write("Columns:", df.columns.tolist())
-
-
-# Key Figure kolonunu esnek bul
-kf_col = None
-for c in df.columns:
-    if re.search(r"key\s*figure", str(c), flags=re.IGNORECASE):
-        kf_col = c
-        break
-
-if kf_col is None:
-    st.error("‘Key Figure’ kolonu bulunamadı. Lütfen Excel başlığını kontrol edin.")
-    st.stop()
-
-
 st.success("Dosya okundu ✅")
 st.dataframe(df.head(), use_container_width=True)
 
-plant_col = "Plant" if "Plant" in df.columns else next(
-    (c for c in df.columns if re.search(r"plant|tesis|fabrika", str(c), re.I)), None
-)
-if plant_col is None:
-    st.error("‘Plant/Tesis’ kolonu bulunamadı.")
-    st.stop()
-
+plant_col = "Plant"
+kf_col    = "Key Figure"
 
 # Key figure sınıflandır
 df["_kf_class"] = df[kf_col].map(classify_kf)
 
-# consensus satırlarını EIP olarak işaretle
-df.loc[df["_kf_class"] == "consensus", plant_col] = "EIP"
-
+# 🔧 Colab'daki gibi: consensus satırlarını EIP olarak işaretle
+df.loc[df["_kf_class"] == "consensus", "Plant"] = "EIP"
 
 # Göz kontrolü için
 st.subheader("Key Figure eşleştirme sonucu")
@@ -133,9 +102,9 @@ st.dataframe(
 )
 
 # ------------ 3: Long form + DOC hesap (Colab mantığı) ------------
-month_cols = detect_month_columns(df)
+month_cols = detect_month_columns_by_parsing(df)
 if not month_cols:
-    st.error("Ay kolonları bulunamadı. Lütfen ay başlıklarının tarih içerdiğini kontrol edin (örn. 2025-08-01).")
+    st.error("Ay kolonları bulunamadı. Başlıklar 'YYYY-MM-DD ...' ile başlamalı (Colab regex).")
     st.stop()
 
 
@@ -241,8 +210,6 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 )
-
-
 
 
 
