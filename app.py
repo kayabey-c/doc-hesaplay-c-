@@ -1,24 +1,16 @@
 # app.py
-import io
-import re
-import unicodedata
-import calendar
+import io, re, unicodedata
 from datetime import datetime as DT
-
 import numpy as np
 import pandas as pd
 import streamlit as st
 
-# ==========================
-# Sayfa ayarları
-# ==========================
+# =============== Sayfa Ayarı ===============
 st.set_page_config(page_title="DOC Hesap", layout="wide")
 st.title("📦 Days of Coverage (DOC) Hesaplayıcı")
-st.caption("Excel dosyanızı yükleyin → *projected stock* ve *consensus demand*e göre DOC hesaplayın.")
+st.caption("Excel yükleyin → *projected stock* ve *consensus demand* üzerinden DOC hesaplayın.")
 
-# ==========================
-# Yardımcı fonksiyonlar
-# ==========================
+# =============== Yardımcılar ===============
 def norm_text(s: str) -> str:
     s = str(s).strip()
     s = unicodedata.normalize("NFKD", s)
@@ -29,7 +21,7 @@ def norm_text(s: str) -> str:
 
 KF_PATTERNS = {
     "consensus": [
-        "kisit siz consensus","consensus",
+        "kisit siz consensus", "consensus",
         "kisit siz consensus sell in forecast / malzeme tuketim mik",
         "kisit siz consensus forecast / malzeme tuketim mik",
         "kisit siz consensus sell in forecast / malzeme tuketim mik.",
@@ -57,10 +49,10 @@ def detect_month_columns_flexible(df: pd.DataFrame):
     """
     1) Başlık datetime/Timestamp ise ayın ilk gününe yuvarlar.
     2) Metin başlık 'YYYY-MM-DD...' ile başlıyorsa parse eder.
-    Geriye: [(orijinal_kolon_adı, month_start_ts), ...] döner.
+    3) Metin başlık 'YYYY/MM/DD...' da kabul.
+    Dönen: [(orijinal_kolon_adı, month_start_ts), ...]
     """
     month_cols = []
-
     for c in df.columns:
         # 1) Doğrudan Timestamp/datetime
         if isinstance(c, (pd.Timestamp, DT)):
@@ -76,8 +68,8 @@ def detect_month_columns_flexible(df: pd.DataFrame):
             if pd.notna(ts):
                 month_cols.append((c, pd.Timestamp(ts.year, ts.month, 1)))
 
-    # Sırala
-    month_cols = list(dict.fromkeys(month_cols))  # olası tekrarları temizle
+    # Tekrarları temizle + sırala
+    month_cols = list(dict.fromkeys(month_cols))
     month_cols.sort(key=lambda x: x[1])
     return month_cols
 
@@ -92,7 +84,6 @@ def tr_thousands(n, ndigits=2):
     except Exception:
         return str(n)
 
-# DOC hesap mantığı (30 gün/ay; stok bitene kadar tam aylar + fraksiyonel gün)
 MAX_DOC_IF_NO_RUNOUT = 600
 DAYS_PER_MONTH = 30
 
@@ -125,58 +116,65 @@ def doc_days_from_stock(stock_val, future_monthly_demand):
 
     return MAX_DOC_IF_NO_RUNOUT
 
-# ==========================
-# Kullanıcı girdi alanı
-# ==========================
+# =============== Kenar Çubuğu (Ayarlar) ===============
 with st.sidebar:
     st.subheader("Ayarlar")
-    plant_col = st.text_input("Plant kolonu", value="Plant")
-    kf_col = st.text_input("Key Figure kolonu", value="Key Figure")
-    show_checks = st.checkbox("Ara kontrol tablolarını göster", value=True)
     use_tr_format = st.checkbox("Tabloda TR sayı formatı (1.234.567,89)", value=False)
+    show_checks = st.checkbox("Ara kontrol tablolarını göster", value=True)
+    demo = st.checkbox("Demo veriyle dene (Excel gerekmez)", value=False)
 
-uploaded = st.file_uploader("Excel'i sürükleyip bırakın", type=["xlsx", "xls"])
+# =============== Veri Kaynağı ===============
+df = None
+if demo:
+    # Küçük demo veri (deploy test)
+    dates = pd.date_range("2025-01-01", periods=6, freq="MS")
+    cols = ["Plant", "Key Figure"] + [d.strftime("%Y-%m-%d 00:00:00") for d in dates]
+    rows = [
+        ["EIP", "Consensus",           1000, 1200, 1100,  900, 1000, 1000],
+        ["GP",  "Projected Stock",     5000, 4000, 3500, 2800, 2600, 2400],
+        ["EIP", "Kısıtsız Consensus Sell-in Forecast / Malzeme Tüketim Mik.", 1000,1200,1100,900,1000,1000],
+        ["GP",  "Unconstrained Projected Stock", 5000,4000,3500,2800,2600,2400],
+    ]
+    df = pd.DataFrame(rows, columns=cols)
+else:
+    uploaded = st.file_uploader("Excel'i sürükleyip bırakın", type=["xlsx", "xls"])
+    if uploaded is None:
+        st.info("Başlamak için bir Excel dosyası yükleyin ya da 'Demo veriyle dene' kutusunu işaretleyin.")
+        st.stop()
+    try:
+        df = pd.read_excel(uploaded)  # openpyxl şart (requirements'ta var)
+    except Exception as e:
+        st.error(f"Excel okunamadı: {e}")
+        st.stop()
 
-if uploaded is None:
-    st.info("Başlamak için bir Excel dosyası yükleyin.")
-    st.stop()
-
-# ==========================
-# 1) Excel oku + önizleme
-# ==========================
-try:
-    df = pd.read_excel(uploaded)  # openpyxl engine otomatik seçilir (requirements'ta olmalı)
-except Exception as e:
-    st.error(f"Excel okunamadı: {e}")
-    st.stop()
-
-st.success("Dosya okundu ✅")
+st.success("Veri yüklendi ✅")
+st.write("**Kolonlar:**", list(df.columns))
 st.dataframe(df.head(), use_container_width=True)
 
-# Kolon kontrolleri
-missing_cols = [c for c in [plant_col, kf_col] if c not in df.columns]
-if missing_cols:
-    st.error(f"Beklenen kolon(lar) bulunamadı: {missing_cols}")
+# =============== Kolon seçimi (hata kaynağı %90 burası) ===============
+all_cols = list(df.columns)
+with st.sidebar:
+    plant_col = st.selectbox("Plant kolonu", options=all_cols, index=all_cols.index("Plant") if "Plant" in all_cols else 0)
+    kf_col = st.selectbox("Key Figure kolonu", options=all_cols, index=all_cols.index("Key Figure") if "Key Figure" in all_cols else 0)
+
+missing = [c for c in [plant_col, kf_col] if c not in df.columns]
+if missing:
+    st.error(f"Seçilen kolon(lar) dataframe'de yok: {missing}")
     st.stop()
 
-# ==========================
-# 2) Key Figure sınıflandırma
-# ==========================
+# =============== KF sınıflandırma ===============
 df["_kf_class"] = df[kf_col].map(classify_kf)
 
-# Bazı dosyalarda consensus satırlarının Plant'ı boş/yanlış olabiliyor → EIP'e set edelim
+# Consensus satırlarında Plant eksik olabilir → EIP'e set edelim
 df.loc[df["_kf_class"] == "consensus", plant_col] = df.loc[df["_kf_class"] == "consensus", plant_col].fillna("EIP")
 df.loc[df["_kf_class"] == "consensus", plant_col] = "EIP"
 
 if show_checks:
     st.subheader("Key Figure eşleştirme sonucu (benzersiz)")
     st.dataframe(
-        df[["_kf_class", kf_col]]
-        .drop_duplicates()
-        .sort_values("_kf_class", na_position="last"),
+        df[["_kf_class", kf_col]].drop_duplicates().sort_values("_kf_class", na_position="last"),
         use_container_width=True
     )
-
     df["_key_figure_normalized"] = df[kf_col].map(norm_text)
     st.subheader("'consensus' içeren normalized satırlar")
     st.dataframe(
@@ -184,16 +182,19 @@ if show_checks:
         use_container_width=True
     )
 
-# ==========================
-# 3) Ay kolonları & long format
-# ==========================
+# =============== Ay kolonları + long format ===============
 month_cols = detect_month_columns_flexible(df)
-if not month_cols:
-    st.error("Ay kolonları bulunamadı. Başlıkların datetime olması veya 'YYYY-MM-DD ...' ile başlaması gerekiyor.")
-    st.stop()
-
 st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
-st.write("**İlk 6 ay:**", month_cols[:6])
+if month_cols:
+    st.write("**İlk 6 ay:**", month_cols[:6])
+else:
+    st.error(
+        "Ay kolonları bulunamadı. Çözümler:\n"
+        "- Başlıklar gerçek tarih (Excel datetime) olsun **veya** 'YYYY-MM-DD ...' ile başlasın.\n"
+        "- Örn: '2025-08-01 00:00:00'.\n"
+        "- Şu anki kolon adları için yukarıdaki 'Kolonlar' çıktısına bak."
+    )
+    st.stop()
 
 month_names = [c for c, _ in month_cols]
 col_to_ts = dict(month_cols)
@@ -207,14 +208,10 @@ df_long = df.melt(
 )
 df_long["month_ts"] = df_long["month_col"].map(col_to_ts)
 
-# Güvenlik: sınıflandırma sütunu yoksa yeniden üret
-if "_kf_class" not in df_long.columns:
-    df_long["_kf_class"] = df_long[kf_col].map(classify_kf)
-else:
-    # orijinalden almamız daha sağlıklı
-    df_long["_kf_class"] = df_long[kf_col].map(classify_kf)
+# Sınıflandırma güvenliği
+df_long["_kf_class"] = df_long[kf_col].map(classify_kf)
 
-# Sadece EIP consensus
+# Filtreler
 is_eip = df_long[plant_col].astype(str).str.lower().str.contains("eip", na=False)
 mask_consensus = (df_long["_kf_class"] == "consensus") & is_eip
 mask_projected = (df_long["_kf_class"] == "projected_stock")
@@ -240,11 +237,11 @@ proj_month = (
 )
 
 doc_df = pd.concat([proj_month, cons_month], axis=1).sort_index()
+st.write("**Aylık özet (ilk satırlar):**")
+st.dataframe(doc_df.head(), use_container_width=True)
 
-# ==========================
-# 4) DOC hesap
-# ==========================
-CONSENSUS_UNIT_MULTIPLIER = 1.0  # Gerekirse birim dönüşüm
+# =============== DOC hesap ===============
+CONSENSUS_UNIT_MULTIPLIER = 1.0
 months = doc_df.index.to_list()
 
 stock = doc_df["monthly_projected_eip_gp"].reindex(months).fillna(0).astype(float)
@@ -252,27 +249,25 @@ dem = (doc_df["monthly_consensus_eip"].reindex(months).fillna(0).astype(float) *
 
 doc_vals = []
 for i, _ in enumerate(months):
-    # Aynı ayın stoğunu, bir SONRAKİ aydan itibaren gelen talep ile tüket (Excel mantığına paralel)
+    # Aynı ay stoğunu bir SONRAKİ ay talebiyle tüket
     future_dem = dem.iloc[i + 1 :]
     doc_vals.append(doc_days_from_stock(stock.iloc[i], future_dem))
 
 doc_df["DOC_days"] = doc_vals
 
-# Hızlı sanity check (opsiyonel)
+# Hızlı sanity check
 if len(months) >= 2 and dem.iloc[1] > 0:
     naive_first = stock.iloc[0] / dem.iloc[1] * DAYS_PER_MONTH
     st.caption(f"[Sanity] 1. satır (sadece bir sonraki ay) ≈ {naive_first:.2f} gün")
 
-# ==========================
-# 5) Çıktı tablo + indirme
-# ==========================
+# =============== Çıktı & İndirme ===============
 st.subheader("📊 DOC Sonuç Tablosu")
-out_df = (
-    doc_df[["monthly_projected_eip_gp", "monthly_consensus_eip", "DOC_days"]]
-    .reset_index(names=["month"])
-)
+out_df = doc_df[["monthly_projected_eip_gp", "monthly_consensus_eip", "DOC_days"]].reset_index(names=["month"])
 
-# Görüntü formatı
+if out_df.empty:
+    st.warning("Çıktı tablosu boş görünüyor. 'projected_stock' veya 'consensus' sınıflaması eşleşmemiş olabilir.")
+    st.stop()
+
 if use_tr_format:
     show_df = out_df.copy()
     show_df["monthly_projected_eip_gp"] = show_df["monthly_projected_eip_gp"].map(lambda x: tr_thousands(x, 2))
@@ -282,19 +277,16 @@ if use_tr_format:
 else:
     st.dataframe(out_df, use_container_width=True)
 
-# Excel indir
 buf = io.BytesIO()
 with pd.ExcelWriter(buf, engine="XlsxWriter") as writer:
     out_df.to_excel(writer, sheet_name="DOC", index=False)
-    # Basit format
     wb = writer.book
     ws = writer.sheets["DOC"]
     num_fmt = wb.add_format({"num_format": "#,##0.00"})
     day_fmt = wb.add_format({"num_format": "0.00"})
-    # Kolon genişlikleri
-    ws.set_column("A:A", 12)  # month
-    ws.set_column("B:C", 18, num_fmt)
-    ws.set_column("D:D", 12, day_fmt)
+    ws.set_column("A:A", 12)      # month
+    ws.set_column("B:C", 18, num_fmt)  # stocks/demand
+    ws.set_column("D:D", 12, day_fmt)  # DOC_days
 
 st.download_button(
     "Excel'i indir (DOC_summary.xlsx)",
@@ -302,7 +294,6 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
-
 
 
 
