@@ -167,8 +167,6 @@ col_to_ts   = dict(month_cols)
 st.markdown("**Months columns (ilk 6):**")
 st.write(month_cols[:6])
 
-st.markdown("---")
-st.subheader("📊 DOC Sonuç Tablosu")
 
 # ======= Long form =======
 df_long = df.melt(
@@ -228,6 +226,7 @@ st.dataframe(out_df, use_container_width=True)
 
 buf = io.BytesIO()
 with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+
     out_df.to_excel(writer, sheet_name="DOC", index=False)
     wb = writer.book
     ws = writer.sheets["DOC"]
@@ -244,3 +243,4 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
+
