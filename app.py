@@ -1,7 +1,8 @@
-17li için app.py ilk 
-
-import io, re, unicodedata
+import io
+import re
+import unicodedata
 from datetime import datetime as DT
+
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -22,20 +23,20 @@ def norm_text(s: str) -> str:
 
 KF_PATTERNS = {
     "consensus": [
-        "kisit siz consensus","consensus",
+        "kisit siz consensus", "consensus",
         "kisit siz consensus sell in forecast / malzeme tuketim mik",
         "kisit siz consensus forecast / malzeme tuketim mik",
         "kisit siz consensus sell in forecast / malzeme tuketim mik.",
         "kısıtsız consensus sell-in forecast / malzeme tüketim mik",
         "kısıtsız consensus sell-in forecast / malzeme tüketim mik."
     ],
-    "beginning_stock": ["baslangic stok","beginning stock"],
+    "beginning_stock": ["baslangic stok", "beginning stock"],
     "transport_receipt": ["transport receipt"],
     "recommended_order": ["recommended order"],
     "projected_stock": [
-        "unconstrained projected stock","projected stock","unconstrainded projected stock"
+        "unconstrained projected stock", "projected stock", "unconstrainded projected stock"
     ],
-    "doc": ["unconstrained days of coverage","days of coverage"]
+    "doc": ["unconstrained days of coverage", "days of coverage"]
 }
 
 def classify_kf(val):
@@ -100,16 +101,16 @@ def doc_days_from_stock(stock_val, future_monthly_demand):
 with st.sidebar:
     st.subheader("Ayarlar")
     use_tr_format = st.checkbox("Tabloda TR sayı formatı (1.234.567,89)", value=False)
-    show_checks = st.checkbox("Ara kontrol tablolarını göster", value=False)
-    demo = st.checkbox("Demo veriyle dene (Excel gerekmez)", value=False)
+    show_checks  = st.checkbox("Ara kontrol tablolarını göster", value=False)
+    demo         = st.checkbox("Demo veriyle dene (Excel gerekmez)", value=False)
 
 # ======= Veri =======
 if demo:
     dates = pd.date_range("2025-01-01", periods=6, freq="MS")
     cols = ["Plant", "Key Figure"] + [d.strftime("%Y-%m-%d 00:00:00") for d in dates]
     rows = [
-        ["EIP", "Consensus",           1000, 1200, 1100,  900, 1000, 1000],
-        ["GP",  "Projected Stock",     5000, 4000, 3500, 2800, 2600, 2400],
+        ["EIP", "Consensus", 1000, 1200, 1100,  900, 1000, 1000],
+        ["GP",  "Projected Stock", 5000, 4000, 3500, 2800, 2600, 2400],
         ["EIP", "Kısıtsız Consensus Sell-in Forecast / Malzeme Tüketim Mik.", 1000,1200,1100,900,1000,1000],
         ["GP",  "Unconstrained Projected Stock", 5000,4000,3500,2800,2600,2400],
     ]
@@ -129,14 +130,13 @@ if show_checks:
     st.success("Veri yüklendi ✅")
     st.dataframe(df.head(), use_container_width=True)
 
-
-# Kolon seçimleri
+# ======= Kolon seçimleri =======
 all_cols = list(df.columns)
 with st.sidebar:
     plant_col = st.selectbox("Plant kolonu", options=all_cols, index=all_cols.index("Plant") if "Plant" in all_cols else 0)
-    kf_col = st.selectbox("Key Figure kolonu", options=all_cols, index=all_cols.index("Key Figure") if "Key Figure" in all_cols else 0)
+    kf_col    = st.selectbox("Key Figure kolonu", options=all_cols, index=all_cols.index("Key Figure") if "Key Figure" in all_cols else 0)
 
-# KF sınıflandırma
+# ======= KF sınıflandırma =======
 df["_kf_class"] = df[kf_col].map(classify_kf)
 df.loc[df["_kf_class"] == "consensus", plant_col] = df.loc[df["_kf_class"] == "consensus", plant_col].fillna("EIP")
 df.loc[df["_kf_class"] == "consensus", plant_col] = "EIP"
@@ -154,31 +154,31 @@ if show_checks:
         use_container_width=True
     )
 
-# Ay kolonları
+# ======= Ay kolonları =======
 month_cols = detect_month_columns_flexible(df)
 if not month_cols:
     st.error("Ay kolonları bulunamadı. Başlıklar datetime olmalı veya 'YYYY-MM-DD ...' ile başlamalı.")
     st.stop()
 
 month_names = [c for c, _ in month_cols]
-col_to_ts = dict(month_cols)
+col_to_ts   = dict(month_cols)
 
 if show_checks:
     st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
     st.write("**İlk 6 ay:**", month_cols[:6])
 
-# Long form
+# ======= Long form =======
 df_long = df.melt(
     id_vars=[c for c in df.columns if c not in month_names],
     value_vars=month_names,
     var_name="month_col",
     value_name="value"
 )
-df_long["month_ts"] = df_long["month_col"].map(col_to_ts)
+df_long["month_ts"]  = df_long["month_col"].map(col_to_ts)
 df_long["_kf_class"] = df_long[kf_col].map(classify_kf)
 
 # Filtreler
-is_eip = df_long[plant_col].astype(str).str.lower().str.contains("eip", na=False)
+is_eip         = df_long[plant_col].astype(str).str.lower().str.contains("eip", na=False)
 mask_consensus = (df_long["_kf_class"] == "consensus") & is_eip
 mask_projected = (df_long["_kf_class"] == "projected_stock")
 
@@ -197,15 +197,15 @@ proj_month = (
 )
 doc_df = pd.concat([proj_month, cons_month], axis=1).sort_index()
 
-# DOC
+# ======= DOC =======
 CONSENSUS_UNIT_MULTIPLIER = 1.0
 months = doc_df.index.to_list()
-stock = doc_df["monthly_projected_eip_gp"].reindex(months).fillna(0).astype(float)
-dem = (doc_df["monthly_consensus_eip"].reindex(months).fillna(0).astype(float) * CONSENSUS_UNIT_MULTIPLIER).clip(lower=0)
+stock  = doc_df["monthly_projected_eip_gp"].reindex(months).fillna(0).astype(float)
+dem    = (doc_df["monthly_consensus_eip"].reindex(months).fillna(0).astype(float) * CONSENSUS_UNIT_MULTIPLIER).clip(lower=0)
 
 doc_vals = []
 for i, _ in enumerate(months):
-    future_dem = dem.iloc[i + 1 :]
+    future_dem = dem.iloc[i + 1:]
     doc_vals.append(doc_days_from_stock(stock.iloc[i], future_dem))
 doc_df["DOC_days"] = doc_vals
 
@@ -213,18 +213,17 @@ if show_checks and len(months) >= 2 and dem.iloc[1] > 0:
     naive_first = stock.iloc[0] / dem.iloc[1] * DAYS_PER_MONTH
     st.caption(f"[Sanity] 1. satır (sadece bir sonraki ay) ≈ {naive_first:.2f} gün")
 
-
-# Çıktı + indir
+# ======= Çıktı + indir =======
 st.subheader("📊 DOC Sonuç Tablosu")
 out_df = doc_df[["monthly_projected_eip_gp", "monthly_consensus_eip", "DOC_days"]].reset_index(names=["month"])
+
 if use_tr_format:
     num_cols = out_df.select_dtypes(include=[np.number]).columns
     out_df[num_cols] = out_df[num_cols].applymap(tr_thousands)
+
 st.dataframe(out_df, use_container_width=True)
 
-
 buf = io.BytesIO()
-
 with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
 
     out_df.to_excel(writer, sheet_name="DOC", index=False)
@@ -236,12 +235,10 @@ with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
     ws.set_column("B:C", 18, num_fmt)
     ws.set_column("D:D", 12, day_fmt)
 
+buf.seek(0)
 st.download_button(
     "Excel'i indir (DOC_summary.xlsx)",
     data=buf.getvalue(),
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
-
-
-
