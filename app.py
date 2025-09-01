@@ -125,29 +125,6 @@ else:
     except Exception as e:
         st.error(f"Excel okunamadı: {e}")
         st.stop()
-        
-# ======= Yüklenen Veri =======
-base_cols = [c for c in df.columns if c not in [cn for cn, _ in detect_month_columns_flexible(df)]]
-month_cols = [cn for cn, _ in detect_month_columns_flexible(df)]
-
-# KF sınıfları zaten yukarıda eklendi: df["_kf_class"]
-wanted_kf = ["consensus", "projected_stock"]
-grid_df = (
-    df[df["_kf_class"].isin(wanted_kf)]
-    .loc[:, base_cols + month_cols]
-)
-
-st.subheader("📥 Yüklenen Veri")
-tab_all, tab_two = st.tabs(["Tümü", "Sadece 'consensus' & 'projected stock'"])
-
-with tab_all:
-    st.dataframe(df, use_container_width=True, height=520)
-
-with tab_two:
-    st.caption(f"Satır sayısı: {len(grid_df):,}")
-    st.dataframe(grid_df, use_container_width=True, height=520)
-
-
 
 # ======= Kolon seçimleri =======
 all_cols = list(df.columns)
@@ -155,8 +132,9 @@ with st.sidebar:
     plant_col = st.selectbox("Plant kolonu", options=all_cols, index=all_cols.index("Plant") if "Plant" in all_cols else 0)
     kf_col    = st.selectbox("Key Figure kolonu", options=all_cols, index=all_cols.index("Key Figure") if "Key Figure" in all_cols else 0)
 
-# ======= KF sınıflandırma =======
+# ======= KF sınıflandırma (ÖNCE) =======
 df["_kf_class"] = df[kf_col].map(classify_kf)
+# EIP zorlaması (consensus satırları EIP olsun)
 df.loc[df["_kf_class"] == "consensus", plant_col] = df.loc[df["_kf_class"] == "consensus", plant_col].fillna("EIP")
 df.loc[df["_kf_class"] == "consensus", plant_col] = "EIP"
 
@@ -173,10 +151,27 @@ if show_checks:
         use_container_width=True
     )
 
+# ======= Ay kolonları (month_names & col_to_ts burada) =======
+month_pairs = detect_month_columns_flexible(df)   # [(orijinal_kolon, TS(YYYY-MM-01)), ...]
+if not month_pairs:
+    st.error("Ay kolonları bulunamadı. Başlıklar datetime olmalı veya 'YYYY-MM-DD ...' ile başlamalı.")
+    st.stop()
 
-if show_checks:
-    st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
-    st.write("**İlk 6 ay:**", month_cols[:6])
+month_names = [c for c, _ in month_pairs]  # melt için
+col_to_ts   = dict(month_pairs)            # kolondan TS(ay başı) haritası
+
+# ======= Yüklenen Veri (ham + filtreli) =======
+base_cols  = [c for c in df.columns if c not in month_names]
+wanted_kf  = ["consensus", "projected_stock"]
+grid_df = df[df["_kf_class"].isin(wanted_kf)].loc[:, base_cols + month_names]
+
+st.subheader("📥 Yüklenen Veri")
+tab_all, tab_two = st.tabs(["Tümü", "Sadece 'consensus' & 'projected stock'"])
+with tab_all:
+    st.dataframe(df, use_container_width=True, height=520)
+with tab_two:
+    st.caption(f"Satır sayısı: {len(grid_df):,}")
+    st.dataframe(grid_df, use_container_width=True, height=520)
 
 # ======= Long form =======
 df_long = df.melt(
@@ -236,7 +231,6 @@ st.dataframe(out_df, use_container_width=True)
 
 buf = io.BytesIO()
 with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
-
     out_df.to_excel(writer, sheet_name="DOC", index=False)
     wb = writer.book
     ws = writer.sheets["DOC"]
@@ -253,4 +247,3 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
-
