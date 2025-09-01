@@ -1,6 +1,3 @@
-
-17li için app.py ilk 
-
 import io, re, unicodedata
 from datetime import datetime as DT
 import numpy as np
@@ -232,6 +229,7 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
+
 
 
 
