@@ -203,11 +203,34 @@ months = doc_df.index.to_list()
 stock  = doc_df["monthly_projected_eip_gp"].reindex(months).fillna(0).astype(float)
 dem    = (doc_df["monthly_consensus_eip"].reindex(months).fillna(0).astype(float) * CONSENSUS_UNIT_MULTIPLIER).clip(lower=0)
 
-doc_vals = []
+doc_days_list = []
+runout_month_list = []
+
 for i, _ in enumerate(months):
     future_dem = dem.iloc[i + 1:]
-    doc_vals.append(doc_days_from_stock(stock.iloc[i], future_dem))
-doc_df["DOC_days"] = doc_vals
+    # DOC gün hesabı (mevcut fonksiyonunla)
+    doc_days_i = doc_days_from_stock(stock.iloc[i], future_dem)
+    doc_days_list.append(doc_days_i)
+
+    # Runout Month (stok hangi ayda biter?)
+    remaining = float(stock.iloc[i]) if pd.notna(stock.iloc[i]) else 0.0
+    runout_ts = None
+    if remaining > 0:
+        for ts, dm_val in zip(dem.index[i + 1:], future_dem.values):
+            dm_val = max(0.0, float(dm_val) if pd.notna(dm_val) else 0.0)
+            if dm_val == 0:
+                # talep 0 ise ay tamamen geçer
+                continue
+            if remaining > dm_val:
+                remaining -= dm_val
+            else:
+                runout_ts = ts
+                break
+    runout_month_list.append(runout_ts)
+
+doc_df["DOC_days"] = doc_days_list
+doc_df["Runout_month"] = runout_month_list  # Timestamp ya da NaT
+
 
 if show_checks and len(months) >= 2 and dem.iloc[1] > 0:
     naive_first = stock.iloc[0] / dem.iloc[1] * DAYS_PER_MONTH
@@ -215,7 +238,16 @@ if show_checks and len(months) >= 2 and dem.iloc[1] > 0:
 
 # ======= Çıktı + indir =======
 st.subheader("📊 DOC Sonuç Tablosu")
-out_df = doc_df[["monthly_projected_eip_gp", "monthly_consensus_eip", "DOC_days"]].reset_index(names=["month"])
+out_df = doc_df[[
+    "monthly_projected_eip_gp",
+    "monthly_consensus_eip",
+    "DOC_days",
+    "Runout_month",
+]].reset_index(names=["month"])
+
+# Ay cinsinden DOC
+out_df["DOC_months"] = (out_df["DOC_days"] / 30.0).round(2)
+
 
 if use_tr_format:
     num_cols = out_df.select_dtypes(include=[np.number]).columns
@@ -242,3 +274,4 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
+
