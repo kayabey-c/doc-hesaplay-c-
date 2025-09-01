@@ -1,3 +1,6 @@
+
+17li için app.py ilk 
+
 import io, re, unicodedata
 from datetime import datetime as DT
 import numpy as np
@@ -98,7 +101,7 @@ def doc_days_from_stock(stock_val, future_monthly_demand):
 with st.sidebar:
     st.subheader("Ayarlar")
     use_tr_format = st.checkbox("Tabloda TR sayı formatı (1.234.567,89)", value=False)
-    show_checks = st.checkbox("Ara kontrol tablolarını göster", value=False)
+    show_checks = st.checkbox("Ara kontrol tablolarını göster", value=True)
     demo = st.checkbox("Demo veriyle dene (Excel gerekmez)", value=False)
 
 # ======= Veri =======
@@ -123,10 +126,8 @@ else:
         st.error(f"Excel okunamadı: {e}")
         st.stop()
 
-if show_checks:
-    st.success("Veri yüklendi ✅")
-    st.dataframe(df.head(), use_container_width=True)
-
+st.success("Veri yüklendi ✅")
+st.dataframe(df.head(), use_container_width=True)
 
 # Kolon seçimleri
 all_cols = list(df.columns)
@@ -157,13 +158,11 @@ month_cols = detect_month_columns_flexible(df)
 if not month_cols:
     st.error("Ay kolonları bulunamadı. Başlıklar datetime olmalı veya 'YYYY-MM-DD ...' ile başlamalı.")
     st.stop()
+st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
+st.write("**İlk 6 ay:**", month_cols[:6])
 
 month_names = [c for c, _ in month_cols]
 col_to_ts = dict(month_cols)
-
-if show_checks:
-    st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
-    st.write("**İlk 6 ay:**", month_cols[:6])
 
 # Long form
 df_long = df.melt(
@@ -207,19 +206,14 @@ for i, _ in enumerate(months):
     doc_vals.append(doc_days_from_stock(stock.iloc[i], future_dem))
 doc_df["DOC_days"] = doc_vals
 
-if show_checks and len(months) >= 2 and dem.iloc[1] > 0:
+if len(months) >= 2 and dem.iloc[1] > 0:
     naive_first = stock.iloc[0] / dem.iloc[1] * DAYS_PER_MONTH
     st.caption(f"[Sanity] 1. satır (sadece bir sonraki ay) ≈ {naive_first:.2f} gün")
-
 
 # Çıktı + indir
 st.subheader("📊 DOC Sonuç Tablosu")
 out_df = doc_df[["monthly_projected_eip_gp", "monthly_consensus_eip", "DOC_days"]].reset_index(names=["month"])
-if use_tr_format:
-    num_cols = out_df.select_dtypes(include=[np.number]).columns
-    out_df[num_cols] = out_df[num_cols].applymap(tr_thousands)
-st.dataframe(out_df, use_container_width=True)
-
+st.dataframe(out_df if not st.session_state.get("tr_fmt") else out_df.applymap(tr_thousands), use_container_width=True)
 
 buf = io.BytesIO()
 with pd.ExcelWriter(buf, engine="XlsxWriter") as writer:
@@ -238,8 +232,6 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
-
-
 
 
 
