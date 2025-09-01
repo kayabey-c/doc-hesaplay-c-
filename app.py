@@ -126,10 +126,9 @@ else:
         st.error(f"Excel okunamadı: {e}")
         st.stop()
 
-st.success("Dosya okundu ✅")
-st.subheader("📄 Yüklenen Veri (ilk 5 satır)")
-st.dataframe(df.head(), use_container_width=True)
-
+if show_checks:
+    st.success("Veri yüklendi ✅")
+    st.dataframe(df.head(), use_container_width=True)
 
 # ======= Kolon seçimleri =======
 all_cols = list(df.columns)
@@ -164,9 +163,9 @@ if not month_cols:
 month_names = [c for c, _ in month_cols]
 col_to_ts   = dict(month_cols)
 
-st.markdown("**Months columns (ilk 6):**")
-st.write(month_cols[:6])
-
+if show_checks:
+    st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
+    st.write("**İlk 6 ay:**", month_cols[:6])
 
 # ======= Long form =======
 df_long = df.melt(
@@ -243,4 +242,3 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
-
