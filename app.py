@@ -126,9 +126,10 @@ else:
         st.error(f"Excel okunamadı: {e}")
         st.stop()
 
-if show_checks:
-    st.success("Veri yüklendi ✅")
-    st.dataframe(df.head(), use_container_width=True)
+st.success("Dosya okundu ✅")
+st.subheader("📄 Yüklenen Veri (ilk 5 satır)")
+st.dataframe(df.head(), use_container_width=True)
+
 
 # ======= Kolon seçimleri =======
 all_cols = list(df.columns)
@@ -163,9 +164,11 @@ if not month_cols:
 month_names = [c for c, _ in month_cols]
 col_to_ts   = dict(month_cols)
 
-if show_checks:
-    st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
-    st.write("**İlk 6 ay:**", month_cols[:6])
+st.markdown("**Months columns (ilk 6):**")
+st.write(month_cols[:6])
+
+st.markdown("---")
+st.subheader("📊 DOC Sonuç Tablosu")
 
 # ======= Long form =======
 df_long = df.melt(
@@ -203,34 +206,11 @@ months = doc_df.index.to_list()
 stock  = doc_df["monthly_projected_eip_gp"].reindex(months).fillna(0).astype(float)
 dem    = (doc_df["monthly_consensus_eip"].reindex(months).fillna(0).astype(float) * CONSENSUS_UNIT_MULTIPLIER).clip(lower=0)
 
-doc_days_list = []
-runout_month_list = []
-
+doc_vals = []
 for i, _ in enumerate(months):
     future_dem = dem.iloc[i + 1:]
-    # DOC gün hesabı (mevcut fonksiyonunla)
-    doc_days_i = doc_days_from_stock(stock.iloc[i], future_dem)
-    doc_days_list.append(doc_days_i)
-
-    # Runout Month (stok hangi ayda biter?)
-    remaining = float(stock.iloc[i]) if pd.notna(stock.iloc[i]) else 0.0
-    runout_ts = None
-    if remaining > 0:
-        for ts, dm_val in zip(dem.index[i + 1:], future_dem.values):
-            dm_val = max(0.0, float(dm_val) if pd.notna(dm_val) else 0.0)
-            if dm_val == 0:
-                # talep 0 ise ay tamamen geçer
-                continue
-            if remaining > dm_val:
-                remaining -= dm_val
-            else:
-                runout_ts = ts
-                break
-    runout_month_list.append(runout_ts)
-
-doc_df["DOC_days"] = doc_days_list
-doc_df["Runout_month"] = runout_month_list  # Timestamp ya da NaT
-
+    doc_vals.append(doc_days_from_stock(stock.iloc[i], future_dem))
+doc_df["DOC_days"] = doc_vals
 
 if show_checks and len(months) >= 2 and dem.iloc[1] > 0:
     naive_first = stock.iloc[0] / dem.iloc[1] * DAYS_PER_MONTH
@@ -238,16 +218,7 @@ if show_checks and len(months) >= 2 and dem.iloc[1] > 0:
 
 # ======= Çıktı + indir =======
 st.subheader("📊 DOC Sonuç Tablosu")
-out_df = doc_df[[
-    "monthly_projected_eip_gp",
-    "monthly_consensus_eip",
-    "DOC_days",
-    "Runout_month",
-]].reset_index(names=["month"])
-
-# Ay cinsinden DOC
-out_df["DOC_months"] = (out_df["DOC_days"] / 30.0).round(2)
-
+out_df = doc_df[["monthly_projected_eip_gp", "monthly_consensus_eip", "DOC_days"]].reset_index(names=["month"])
 
 if use_tr_format:
     num_cols = out_df.select_dtypes(include=[np.number]).columns
@@ -257,7 +228,6 @@ st.dataframe(out_df, use_container_width=True)
 
 buf = io.BytesIO()
 with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
-
     out_df.to_excel(writer, sheet_name="DOC", index=False)
     wb = writer.book
     ws = writer.sheets["DOC"]
@@ -274,4 +244,3 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
-
