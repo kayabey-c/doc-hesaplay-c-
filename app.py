@@ -125,10 +125,29 @@ else:
     except Exception as e:
         st.error(f"Excel okunamadı: {e}")
         st.stop()
+        
+# ======= Yüklenen Veri =======
+base_cols = [c for c in df.columns if c not in [cn for cn, _ in detect_month_columns_flexible(df)]]
+month_cols = [cn for cn, _ in detect_month_columns_flexible(df)]
 
-if show_checks:
-    st.success("Veri yüklendi ✅")
-    st.dataframe(df.head(), use_container_width=True)
+# KF sınıfları zaten yukarıda eklendi: df["_kf_class"]
+wanted_kf = ["consensus", "projected_stock"]
+grid_df = (
+    df[df["_kf_class"].isin(wanted_kf)]
+    .loc[:, base_cols + month_cols]
+)
+
+st.subheader("📥 Yüklenen Veri")
+tab_all, tab_two = st.tabs(["Tümü", "Sadece 'consensus' & 'projected stock'"])
+
+with tab_all:
+    st.dataframe(df, use_container_width=True, height=520)
+
+with tab_two:
+    st.caption(f"Satır sayısı: {len(grid_df):,}")
+    st.dataframe(grid_df, use_container_width=True, height=520)
+
+
 
 # ======= Kolon seçimleri =======
 all_cols = list(df.columns)
@@ -154,14 +173,6 @@ if show_checks:
         use_container_width=True
     )
 
-# ======= Ay kolonları =======
-month_cols = detect_month_columns_flexible(df)
-if not month_cols:
-    st.error("Ay kolonları bulunamadı. Başlıklar datetime olmalı veya 'YYYY-MM-DD ...' ile başlamalı.")
-    st.stop()
-
-month_names = [c for c, _ in month_cols]
-col_to_ts   = dict(month_cols)
 
 if show_checks:
     st.write("**Bulunan ay kolon sayısı:**", len(month_cols))
@@ -242,3 +253,4 @@ st.download_button(
     file_name="DOC_summary.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
+
