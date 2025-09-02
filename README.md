@@ -15,4 +15,4 @@ Excel dosyası yükleyerek stok gün (Days of Coverage - DOC) hesabı yapabilirs
 - Numpy  
 
 ## Canlı Demo
-👉 [Buradan uygulamayı deneyin](https://senin-uygulaman.streamlit.app/)
+👉 [Buradan uygulamayı deneyin] https://doc-hesap.streamlit.app/
