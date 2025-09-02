@@ -1,4 +1,4 @@
-# DOC Hesaplama Aracı
+# 📦 DOC Hesaplama Aracı
 
 Bu proje, **Streamlit** ile geliştirilmiş bir web uygulamasıdır.  
 Excel dosyası yükleyerek stok gün (Days of Coverage - DOC) hesabı yapabilirsiniz.
